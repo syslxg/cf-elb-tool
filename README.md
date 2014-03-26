@@ -4,7 +4,13 @@ cf-elb-tool
 Install
 -------
 
-1. bundle install
+1. run `bundle install`
+1. set up AWS credentials in environment varibles
+
+    ```
+    export BOSH_AWS_ACCESS_KEY_ID=KKK
+    export BOSH_AWS_SECRET_ACCESS_KEY=SSS
+    ```
 
 
 Backup

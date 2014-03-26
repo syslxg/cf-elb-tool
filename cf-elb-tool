@@ -27,14 +27,13 @@ class Cf_elb_tool < Mothership
 
   def restore
     aws_login
-    elbs=YAML::load_file(input[:yml_file])["elbs"]
-    elbs.each do |name, settings|
+    @elbs=YAML::load_file(input[:yml_file])["elbs"]
+    validate_settings
+    @elbs.each do |name, settings|
       puts "restoring elb: #{name}"
       options={
           "subnets" => settings["subnets"],
-          "security_groups" => settings["security_groups"].map do |sg|
-              ec2.security_groups.filter('group-name',sg).first.group_id
-            end ,
+          "security_groups" => settings["security_groups"],
           "listeners" => settings["listeners"]
       }
       health_check=settings["health_check"]
@@ -106,6 +105,27 @@ class Cf_elb_tool < Mothership
     return YAML.dump( "elbs" => elbs )
   end
 
+  def validate_settings
+    @elbs.each do |name, settings|
+
+      #check subnets
+      settings["subnets"].each do |s|
+
+        abort("subnet #{s} not found") if ec2.subnets.filter('subnet-id',s).first.nil?
+      end
+
+      #check security groups and convert grpup-name to group_id
+      group_ids = settings["security_groups"].map do |sg|
+          sg_found=ec2.security_groups.filter('group-name',sg).first
+          abort "security groups #{sg} not found" if sg_found.nil?
+          sg_found.group_id
+      end
+
+      @elbs[name]["security_groups"]= group_ids
+
+    end
+
+  end
 end
 
 Mothership.start(ARGV)

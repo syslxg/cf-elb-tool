@@ -6,15 +6,23 @@ require 'mothership'
 
 class Cf_elb_tool < Mothership
 
-
-  desc "backup all elb setttings"
+  desc "backup all elb setttings to a yml file"
+  input :yml_file, :argument => :optional
 
   def backup
     aws_login
-    dump_elbs
+    yml = dump_elbs
+
+    output_file = input[:yml_file]
+    if output_file.nil? then puts yml
+    else
+      File.open( output_file, "w" ) do |f|
+        f.write yml
+      end
+    end
   end
 
-  desc "restore ELBs from yml files"
+  desc "restore ELBs from a yml file"
   input :yml_file, :argument => true
 
   def restore
@@ -95,7 +103,7 @@ class Cf_elb_tool < Mothership
       settings["cert"] = nil
       elbs[name]=settings
     end
-    puts YAML.dump( "elbs" => elbs )
+    return YAML.dump( "elbs" => elbs )
   end
 
 end

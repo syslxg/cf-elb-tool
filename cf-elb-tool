@@ -1,0 +1,103 @@
+#!/usr/bin/env ruby
+
+require 'aws-sdk'
+require 'yaml'
+require 'mothership'
+
+class Cf_elb_tool < Mothership
+
+
+  desc "backup all elb setttings"
+
+  def backup
+    aws_login
+    dump_elbs
+  end
+
+  desc "restore ELBs from yml files"
+  input :yml_file, :argument => true
+
+  def restore
+    aws_login
+    elbs=YAML::load_file(input[:yml_file])["elbs"]
+    elbs.each do |name, settings|
+      puts "restore elb: #{name}"
+      options={
+          "subnets" => settings["subnets"],
+          "security_groups" => settings["security_groups"].map do |sg|
+              ec2.security_groups.filter('group-name',sg).first.group_id
+            end ,
+          "listeners" => settings["listeners"]
+      }
+      health_check=settings["health_check"]
+
+      new_elb=elb.load_balancers.create(name,options)
+      puts "#{new_elb.name} created"
+      new_elb.configure_health_check health_check
+
+    end
+  end
+
+  def aws_login
+    AWS.config(
+        access_key_id: required_env('BOSH_AWS_ACCESS_KEY_ID'),
+        secret_access_key: required_env('BOSH_AWS_SECRET_ACCESS_KEY')
+    )
+  end
+
+  def required_env(name)
+    ENV.fetch(name) { abort "please set environment variable '#{name}' first" }
+  end
+
+  def ec2
+    @ec2 ||= AWS::EC2.new
+  end
+
+  def r53
+    @r53 ||= AWS::Route53.new
+  end
+
+  def s3
+    @s3 ||= AWS::S3.new
+  end
+
+  def elb
+    @elb ||= AWS::ELB.new
+  end
+
+  def iam
+    @iam ||= AWS::IAM.new
+  end
+
+  def dump_listener(listener)
+    hash= {
+      "load_balancer_port" => listener.port,
+      "protocol" => listener.protocol.to_s,
+      "instance_port" => listener.instance_port,
+      "instance_protocol" => listener.instance_protocol.to_s
+    }
+    hash["ssl_certificate_id"] = listener.server_certificate.arn if listener.server_certificate
+    return hash
+  end
+
+  def dump_elbs
+    elbs={}
+    elb.load_balancers.each do |e|
+      name = e.name
+      settings = {}
+      settings["subnets"] = e.subnet_ids.to_a
+      settings["security_groups"] = e.security_groups.map(&:name)
+      settings["health_check"] = e.health_check
+      settings["instances"] = e.instances.map(&:id)  unless settings["instances"].nil?
+      settings["listeners"] = e.listeners.map { |l| dump_listener l}
+      settings["dns_record"] = nil
+      settings["domain"] = nil
+      settings["cert"] = nil
+      elbs[name]=settings
+    end
+    puts YAML.dump( "elbs" => elbs )
+  end
+
+end
+
+Mothership.start(ARGV)

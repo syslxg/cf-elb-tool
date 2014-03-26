@@ -21,7 +21,7 @@ class Cf_elb_tool < Mothership
     aws_login
     elbs=YAML::load_file(input[:yml_file])["elbs"]
     elbs.each do |name, settings|
-      puts "restore elb: #{name}"
+      puts "restoring elb: #{name}"
       options={
           "subnets" => settings["subnets"],
           "security_groups" => settings["security_groups"].map do |sg|
@@ -32,7 +32,7 @@ class Cf_elb_tool < Mothership
       health_check=settings["health_check"]
 
       new_elb=elb.load_balancers.create(name,options)
-      puts "#{new_elb.name} created"
+      puts "  #{new_elb.dns_name} created"
       new_elb.configure_health_check health_check
 
     end

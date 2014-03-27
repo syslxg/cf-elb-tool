@@ -83,6 +83,8 @@ class Cf_elb_tool < Mothership
       "instance_port" => listener.instance_port,
       "instance_protocol" => listener.instance_protocol.to_s
     }
+    # server_certificate.arn is undocumented
+    # https://github.com/aws/aws-sdk-ruby/issues/499
     hash["ssl_certificate_id"] = listener.server_certificate.arn if listener.server_certificate
     return hash
   end
@@ -122,6 +124,15 @@ class Cf_elb_tool < Mothership
       end
 
       @elbs[name]["security_groups"]= group_ids
+
+      #check certs
+      settings["listeners"].each do |l|
+        arn = l["ssl_certificate_id"]
+        unless arn.nil?
+          found = iam.server_certificates.find { |c| c.arn == l["ssl_certificate_id"] }
+          abort "certificate #{arn} is not found" unless found
+        end
+      end
 
     end
 

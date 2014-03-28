@@ -15,7 +15,29 @@ Install
 
 Backup
 ------
-1. bundle exec ./cf-elb-tool backup [elbs.yml]
+1. Run `bundle exec ./cf-elb-tool backup [elbs.yml]`
+2. Edit the yml file, add dns_record, domain and ttl
+
+    ```
+    ---
+    elbs:
+      cfrouter:
+        subnets:
+    ...
+        listeners:
+        - load_balancer_port: 80
+          protocol: http
+          instance_port: 80
+          instance_protocol: http
+        - load_balancer_port: 443
+          protocol: https
+          instance_port: 80
+          instance_protocol: http
+          ssl_certificate_id: arn:aws:iam::713204667821:server-certificate/cfrouter_cert
+        dns_record: '*'
+        domain: garyliu.cf-app.com
+        ttl: 3600
+    ```
 
 Restore
 -------

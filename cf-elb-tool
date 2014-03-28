@@ -16,9 +16,7 @@ class Cf_elb_tool < Mothership
     output_file = input[:yml_file]
     if output_file.nil? then puts yml
     else
-      File.open( output_file, "w" ) do |f|
-        f.write yml
-      end
+      File.open( output_file, "w" ) { |f| f.write yml }
     end
   end
 
@@ -29,6 +27,7 @@ class Cf_elb_tool < Mothership
     aws_login
     @elbs=YAML::load_file(input[:yml_file])["elbs"]
     validate_settings
+
     @elbs.each do |name, settings|
       puts "restoring elb: #{name}"
       options={
@@ -36,13 +35,39 @@ class Cf_elb_tool < Mothership
           "security_groups" => settings["security_groups"],
           "listeners" => settings["listeners"]
       }
-      health_check=settings["health_check"]
+      health_check = settings["health_check"]
 
-      new_elb=elb.load_balancers.create(name,options)
+      new_elb = elb.load_balancers.create(name,options)
       puts "  #{new_elb.dns_name} created"
       new_elb.configure_health_check health_check
 
+      if settings["dns_record"] then
+        domain = settings["domain"]
+        record = settings["dns_record"]
+        ttl = settings["ttl"] || 3600
+        zone_id = settings["zone_id"]
+        update_dns_record( zone_id, record, domain, ttl, new_elb.dns_name )
+      end
     end
+  end
+
+  def update_dns_record( zone_id, dns_record, domain, ttl,address)
+    r53.client.change_resource_record_sets(
+        hosted_zone_id: zone_id,
+        change_batch: {
+          changes: [
+          {
+            action: "UPSERT",
+            resource_record_set: {
+              name: "#{dns_record}.#{domain}",
+              type: 'CNAME',
+              ttl: ttl,
+              resource_records: [{ value: address}]
+            }
+          }
+          ]
+        }
+    )
   end
 
   def aws_login
@@ -129,14 +154,26 @@ class Cf_elb_tool < Mothership
       settings["listeners"].each do |l|
         arn = l["ssl_certificate_id"]
         unless arn.nil?
-          found = iam.server_certificates.find { |c| c.arn == l["ssl_certificate_id"] }
+          found = iam.server_certificates.find { |c| c.arn == arn }
           abort "certificate #{arn} is not found" unless found
         end
+      end
+
+      #check dns zone and lookup zone id
+      zone = settings["domain"]
+      dns_record = settings["dns_record"]
+      if zone || dns_record then
+        abort "dns_record and domain must be both set" unless dns_record && zone
+        zone = "#{zone}." unless zone =~ /\.$/
+        zone_found = r53.hosted_zones.select {|z| z.name == zone }
+        abort "zone \'#{zone}\' not found on Route53"  if zone_found.empty?
+        @elbs[name]["zone_id"] = zone_found.first.id
       end
 
     end
 
   end
+
 end
 
 Mothership.start(ARGV)

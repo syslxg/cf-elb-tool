@@ -152,10 +152,13 @@ class Cf_elb_tool < Mothership
 
       #check certs
       settings["listeners"].each do |l|
+
+        protocol = l["protocol"]
         arn = l["ssl_certificate_id"]
-        unless arn.nil?
+        if  protocol == "ssl" or protocol == "https"
+          abort "A certificate is needed for elb \`#{name} \`" unless arn
           found = iam.server_certificates.find { |c| c.arn == arn }
-          abort "certificate #{arn} is not found" unless found
+          abort "Certificate #{arn} is not found" unless found
         end
       end
 
